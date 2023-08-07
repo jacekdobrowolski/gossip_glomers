@@ -4,21 +4,36 @@ import (
 	"encoding/json"
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 	"log"
+	"sync"
 )
+
+type broadcastNodeDataStore struct {
+	messagesMutex sync.RWMutex
+	messages      []int
+	topologyMutex sync.RWMutex
+	topology      map[string][]string
+}
 
 func main() {
 	n := maelstrom.NewNode()
-	messages := make([]int, 0, 200)
+	bnds := broadcastNodeDataStore{}
 
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
-		var body map[string]any
+		type broadcastMsgType struct {
+			Message int `json:"message"`
+		}
+		var body broadcastMsgType
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
 		}
-		messages = append(messages, body["message"].(int))
-		body["type"] = "broadcast_ok"
 
-		return n.Reply(msg, body)
+		bnds.messagesMutex.Lock()
+		bnds.messages = append(bnds.messages, body.Message)
+		bnds.messagesMutex.Unlock()
+
+		return n.Reply(msg, map[string]any{
+			"type": "broadcast_ok",
+		})
 	})
 
 	n.Handle("read", func(msg maelstrom.Message) error {
@@ -27,22 +42,33 @@ func main() {
 			return err
 		}
 
-		body["type"] = "read_ok"
-		body["messages"] = messages
+		bnds.messagesMutex.RLock()
+		messages := make([]int, len(bnds.messages))
+		copy(messages, bnds.messages)
+		bnds.messagesMutex.RUnlock()
 
-		return n.Reply(msg, body)
+		return n.Reply(msg, map[string]any{
+			"type":     "read_ok",
+			"messages": messages,
+		})
 	})
 
 	n.Handle("topology", func(msg maelstrom.Message) error {
-		var body map[string]any
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
+		type topologyMsgType struct {
+			Topology map[string][]string `json:"topology"`
+		}
+		var topologyMsg topologyMsgType
+		if err := json.Unmarshal(msg.Body, &topologyMsg); err != nil {
 			return err
 		}
 
-		respBody := map[string]string{
+		bnds.topologyMutex.Lock()
+		bnds.topology = topologyMsg.Topology
+		bnds.topologyMutex.Unlock()
+
+		return n.Reply(msg, map[string]any{
 			"type": "topology_ok",
-		}
-		return n.Reply(msg, respBody)
+		})
 	})
 
 	if err := n.Run(); err != nil {
