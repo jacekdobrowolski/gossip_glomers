@@ -42,7 +42,7 @@ func main() {
 		respBody := map[string]string{
 			"type": "topology_ok",
 		}
-		return n.Send(msg.Src, respBody)
+		return n.Reply(msg, respBody)
 	})
 
 	if err := n.Run(); err != nil {
