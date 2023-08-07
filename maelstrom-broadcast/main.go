@@ -39,9 +39,10 @@ func main() {
 			return err
 		}
 
-		body["type"] = "topology_ok"
-
-		return n.Reply(msg, body)
+		respBody := map[string]string{
+			"type": "topology_ok",
+		}
+		return n.Send(msg.Src, respBody)
 	})
 
 	if err := n.Run(); err != nil {
