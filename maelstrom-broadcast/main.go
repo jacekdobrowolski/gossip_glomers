@@ -17,7 +17,7 @@ type broadcastNodeServer struct {
 
 func (s *broadcastNodeServer) getMessages() []int {
 	s.messagesMutex.RLock()
-	messages := make([]int, len(s.messages))
+	messages := make([]int, 0, len(s.messages))
 	for message := range s.messages {
 		messages = append(messages, message)
 	}
